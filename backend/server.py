@@ -187,6 +187,59 @@ async def get_status_checks():
     
     return status_checks
 
+
+# Booking Routes
+@api_router.post("/bookings", response_model=Booking)
+async def create_booking(booking_data: BookingCreate, background_tasks: BackgroundTasks):
+    """Create a new booking and send email notification"""
+    try:
+        # Create booking object
+        booking = Booking(**booking_data.model_dump())
+        
+        # Convert to dict for MongoDB
+        doc = booking.model_dump()
+        doc['created_at'] = doc['created_at'].isoformat()
+        
+        # Save to database
+        await db.bookings.insert_one(doc)
+        
+        # Send email notification in background
+        background_tasks.add_task(send_booking_email, booking)
+        
+        logger.info(f"New booking created: {booking.id}")
+        return booking
+        
+    except Exception as e:
+        logger.error(f"Failed to create booking: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process booking")
+
+
+@api_router.get("/bookings", response_model=List[Booking])
+async def get_bookings():
+    """Get all bookings"""
+    bookings = await db.bookings.find({}, {"_id": 0}).to_list(1000)
+    
+    for booking in bookings:
+        if isinstance(booking.get('created_at'), str):
+            booking['created_at'] = datetime.fromisoformat(booking['created_at'])
+    
+    return bookings
+
+
+@api_router.get("/bookings/{booking_id}", response_model=Booking)
+async def get_booking(booking_id: str):
+    """Get a specific booking by ID"""
+    booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    
+    if isinstance(booking.get('created_at'), str):
+        booking['created_at'] = datetime.fromisoformat(booking['created_at'])
+    
+    return booking
+
+
 # Include the router in the main app
 app.include_router(api_router)
 
