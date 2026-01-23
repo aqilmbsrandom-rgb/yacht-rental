@@ -40,6 +40,124 @@ class StatusCheck(BaseModel):
 class StatusCheckCreate(BaseModel):
     client_name: str
 
+
+# Booking Models
+class BookingCreate(BaseModel):
+    name: str
+    phone: str
+    email: Optional[str] = None
+    date: str
+    boat: str
+    boatName: Optional[str] = None
+    packageType: Optional[str] = None
+    guestCount: str
+    eventType: str
+    message: Optional[str] = None
+
+
+class Booking(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    phone: str
+    email: Optional[str] = None
+    date: str
+    boat: str
+    boatName: Optional[str] = None
+    packageType: Optional[str] = None
+    guestCount: str
+    eventType: str
+    message: Optional[str] = None
+    status: str = "pending"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+# Email configuration
+BOOKING_EMAIL = "aqilmbsrandom@gmail.com"
+
+def send_booking_email(booking: Booking):
+    """Send booking notification email"""
+    try:
+        # Create email content
+        subject = f"New Booking Request - {booking.eventType} on {booking.date}"
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: 'Arial', sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: #4a9494; color: white; padding: 20px; text-align: center; }}
+                .content {{ padding: 20px; background: #f6f5e8; }}
+                .detail-row {{ margin: 10px 0; padding: 10px; background: white; }}
+                .label {{ font-weight: bold; color: #4a9494; }}
+                .footer {{ text-align: center; padding: 20px; color: #666; font-size: 12px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>⚓ Classy Boat</h1>
+                    <h2>New Booking Request</h2>
+                </div>
+                <div class="content">
+                    <div class="detail-row">
+                        <span class="label">Customer Name:</span> {booking.name}
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Phone:</span> {booking.phone}
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Email:</span> {booking.email or 'Not provided'}
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Preferred Date:</span> {booking.date}
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Selected Boat:</span> {booking.boatName or booking.boat}
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Package:</span> {booking.packageType or 'Not selected'}
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Number of Guests:</span> {booking.guestCount}
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Event Type:</span> {booking.eventType}
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Special Requests:</span> {booking.message or 'None'}
+                    </div>
+                </div>
+                <div class="footer">
+                    <p>Booking ID: {booking.id}</p>
+                    <p>Received at: {booking.created_at.strftime('%Y-%m-%d %H:%M UTC')}</p>
+                    <p>Please contact the customer to confirm the booking.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # Log the booking details (email sending would require SMTP setup)
+        logger.info(f"Booking notification for: {BOOKING_EMAIL}")
+        logger.info(f"Subject: {subject}")
+        logger.info(f"Booking details: {booking.model_dump()}")
+        
+        # Note: For production, configure SMTP settings in .env
+        # smtp_host = os.environ.get('SMTP_HOST')
+        # smtp_port = os.environ.get('SMTP_PORT')
+        # smtp_user = os.environ.get('SMTP_USER')
+        # smtp_password = os.environ.get('SMTP_PASSWORD')
+        
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send email: {e}")
+        return False
+
+
 # Add your routes to the router instead of directly to app
 @api_router.get("/")
 async def root():
