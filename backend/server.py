@@ -9,9 +9,7 @@ from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional
 import uuid
 from datetime import datetime, timezone
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import requests
 
 
 ROOT_DIR = Path(__file__).parent
@@ -74,87 +72,66 @@ class Booking(BaseModel):
 
 
 # Email configuration
-BOOKING_EMAIL = "aqilmbsrandom@gmail.com"
+BOOKING_EMAIL = os.environ.get("BOOKING_EMAIL", "aqilmbsrandom@gmail.com")
+EMAILJS_SERVICE_ID = os.environ.get("EMAILJS_SERVICE_ID")
+EMAILJS_TEMPLATE_ID = os.environ.get("EMAILJS_TEMPLATE_ID")
+EMAILJS_PUBLIC_KEY = os.environ.get("EMAILJS_PUBLIC_KEY")
+EMAILJS_PRIVATE_KEY = os.environ.get("EMAILJS_PRIVATE_KEY")  # Optional access token
+EMAILJS_ENDPOINT = "https://api.emailjs.com/api/v1.0/email/send"
+
 
 def send_booking_email(booking: Booking):
-    """Send booking notification email"""
+    """Send booking notification email via EmailJS REST API"""
     try:
-        # Create email content
-        subject = f"New Booking Request - {booking.eventType} on {booking.date}"
-        
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body {{ font-family: 'Arial', sans-serif; line-height: 1.6; color: #333; }}
-                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background: #4a9494; color: white; padding: 20px; text-align: center; }}
-                .content {{ padding: 20px; background: #f6f5e8; }}
-                .detail-row {{ margin: 10px 0; padding: 10px; background: white; }}
-                .label {{ font-weight: bold; color: #4a9494; }}
-                .footer {{ text-align: center; padding: 20px; color: #666; font-size: 12px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>⚓ Classy Boat</h1>
-                    <h2>New Booking Request</h2>
-                </div>
-                <div class="content">
-                    <div class="detail-row">
-                        <span class="label">Customer Name:</span> {booking.name}
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Phone:</span> {booking.phone}
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Email:</span> {booking.email or 'Not provided'}
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Preferred Date:</span> {booking.date}
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Selected Boat:</span> {booking.boatName or booking.boat}
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Package:</span> {booking.packageType or 'Not selected'}
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Number of Guests:</span> {booking.guestCount}
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Event Type:</span> {booking.eventType}
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Special Requests:</span> {booking.message or 'None'}
-                    </div>
-                </div>
-                <div class="footer">
-                    <p>Booking ID: {booking.id}</p>
-                    <p>Received at: {booking.created_at.strftime('%Y-%m-%d %H:%M UTC')}</p>
-                    <p>Please contact the customer to confirm the booking.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-        
-        # Log the booking details (email sending would require SMTP setup)
-        logger.info(f"Booking notification for: {BOOKING_EMAIL}")
-        logger.info(f"Subject: {subject}")
-        logger.info(f"Booking details: {booking.model_dump()}")
-        
-        # Note: For production, configure SMTP settings in .env
-        # smtp_host = os.environ.get('SMTP_HOST')
-        # smtp_port = os.environ.get('SMTP_PORT')
-        # smtp_user = os.environ.get('SMTP_USER')
-        # smtp_password = os.environ.get('SMTP_PASSWORD')
-        
-        return True
+        submitted_at = booking.created_at.strftime('%Y-%m-%d %H:%M UTC')
+
+        template_params = {
+            "to_email": BOOKING_EMAIL,
+            "name": booking.name,
+            "email": booking.email or "Not provided",
+            "phone": booking.phone,
+            "date": booking.date,
+            "boat": booking.boatName or booking.boat,
+            "guests": booking.guestCount,
+            "event_type": booking.eventType,
+            "package": booking.packageType or "Not selected",
+            "message": booking.message or "None",
+            "status": booking.status,
+            "submitted_at": submitted_at,
+            "booking_id": booking.id,
+        }
+
+        payload = {
+            "service_id": EMAILJS_SERVICE_ID,
+            "template_id": EMAILJS_TEMPLATE_ID,
+            "user_id": EMAILJS_PUBLIC_KEY,
+            "template_params": template_params,
+        }
+        if EMAILJS_PRIVATE_KEY:
+            payload["accessToken"] = EMAILJS_PRIVATE_KEY
+
+        headers = {
+            "Content-Type": "application/json",
+            "origin": "http://localhost",
+        }
+
+        response = requests.post(
+            EMAILJS_ENDPOINT,
+            json=payload,
+            headers=headers,
+            timeout=15,
+        )
+
+        if response.status_code == 200:
+            logger.info(f"EmailJS sent booking {booking.id} to {BOOKING_EMAIL}")
+            return True
+
+        logger.error(
+            f"EmailJS failed for booking {booking.id} - status {response.status_code}: {response.text}"
+        )
+        return False
     except Exception as e:
-        logger.error(f"Failed to send email: {e}")
+        logger.error(f"Failed to send email via EmailJS for booking {booking.id}: {e}")
         return False
 
 
